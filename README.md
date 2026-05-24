@@ -1,21 +1,25 @@
 # yt-cap — YouTube Caption Archive
 
-Self-hosted YouTube caption archiver. Subscribe to channels, auto-download closed captions, and expose them via API for RAG / LLM pipelines.
+A self-hosted tool for archiving YouTube video captions. Add channels, auto-download subtitles, query via API.
 
-**No API keys. No YouTube login. Just captions.**
+**No API keys. No YouTube account. Just captions.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
 ---
 
+## Motivation
+
+I built this to feed Korean tech YouTube captions into an LLM RAG pipeline. Manually downloading subtitles from hundreds of videos was painful, so yt-cap automates the whole thing — channel discovery, caption fetching, rate limiting, and API access.
+
 ## What It Does
 
-1. **Add a YouTube channel** by URL — yt-dlp discovers all videos
-2. **Auto-downloads captions** via downloadyoutubesubtitles.com (Playwright headless)
-3. **Stores everything** in SQLite — captions, metadata, video info
-4. **Serves a web dashboard** — real-time progress via SSE, search, export
-5. **Exposes a REST API** — fetch captions individually or in batch (for RAG/LLM)
+- **Discovers videos** from any YouTube channel via yt-dlp
+- **Downloads captions** through downloadyoutubesubtitles.com using headless Chromium (Playwright)
+- **Stores everything** in SQLite — full text, metadata, language info
+- **Web dashboard** with real-time progress, video browser, queue view
+- **REST API** for integration with other tools (RAG pipelines, research apps)
 
 ```bash
 # Add a channel
@@ -23,147 +27,133 @@ curl -X POST -H "x-api-key: 12345" \
   -d '{"url":"https://www.youtube.com/@3Blue1Brown"}' \
   http://localhost:8506/api/channels
 
-# Get captions
+# Fetch a caption
 curl -H "x-api-key: 12345" \
   http://localhost:8506/api/videos/dQw4w9WgXcQ/caption
 ```
 
-## Features
-
-| Feature | Detail |
-|---|---|
-| **Channel scanning** | Full + incremental (chunked for large channels) |
-| **Auto-download** | Background thread, resumes after restart, one channel at a time |
-| **Rate limit handling** | Centralized cooldown manager. 3-min global cooldown, per-chunk delays |
-| **Web UI** | Vue.js SPA with SSE real-time progress, queue view, settings panel |
-| **API** | REST + SSE. X-API-Key auth. Batch caption retrieval |
-| **DB** | SQLite with WAL mode, thread-local connections, write serialization |
-| **Service** | macOS LaunchAgent (auto-start on boot). `yt-cap.sh` for start/stop/status |
-| **SDD** | spec-kit workflow — spec → plan → implement → QA gate |
-
-## Quick Start (macOS Local)
+## Quick Start
 
 ```bash
-# 1. Clone
 git clone https://github.com/mikeleet/yt-cap.git
 cd yt-cap
-
-# 2. Install
 bash yt-cap.sh start
-# Creates .venv, installs deps, launches server on :8506
-
-# 3. Open UI
-open http://localhost:8506
-# PIN is 5580 (for non-localhost access)
-
-# 4. Add a channel
-# Use the UI or API to add YouTube channels
-
-# 5. Install as service (auto-start on boot)
-bash yt-cap.sh install
+# Opens on http://localhost:8506 (PIN: 5580)
 ```
 
-## Docker (Alternative)
-
+To run on boot (macOS):
 ```bash
-cp .env.example .env
-bash docker-run.sh
+bash yt-cap.sh install   # LaunchAgent, auto-starts on login
+```
+
+Docker alternative:
+```bash
+cp .env.example .env && bash docker-run.sh
 ```
 
 ## Architecture
 
 ```
-╔══════════════════════════════════════════╗
-║              Web UI (Vue.js)            ║
-║         SSE ← real-time progress        ║
-╠══════════════════════════════════════════╣
-║           FastAPI REST API              ║
-║    /api/channels  /api/videos           ║
-║    /api/queue     /api/settings         ║
-╠══════════════════════════════════════════╣
-║  Auto-Resume Thread (30s loop)          ║
-║  ├── Scan scheduler                     ║
-║  ├── Download scheduler                 ║
-║  └── Rate limit manager                 ║
-╠══════════════════════════════════════════╣
-║  Caption Fetcher (Playwright headless)  ║
-║  → downloadyoutubesubtitles.com         ║
-╠══════════════════════════════════════════╣
-║  yt-dlp  │  SQLite (WAL)  │  LaunchAgent║
-╚══════════════════════════════════════════╝
+┌─────────────────────────────────────────────┐
+│  Vue.js SPA           SSE ← live progress  │
+├─────────────────────────────────────────────┤
+│  FastAPI              REST + auth           │
+├─────────────────────────────────────────────┤
+│  Background thread (30s loop)               │
+│  ├─ Scan scheduler    (yt-dlp chunks)       │
+│  ├─ Download queue    (one-at-a-time)       │
+│  └─ Rate limiter      (shared cooldowns)    │
+├─────────────────────────────────────────────┤
+│  Caption fetcher      Playwright headless   │
+│  → downloadyoutubesubtitles.com             │
+├─────────────────────────────────────────────┤
+│  yt-dlp  │  SQLite (WAL)  │  LaunchAgent    │
+└─────────────────────────────────────────────┘
 ```
 
 ### Key Files
 
-| File | Purpose |
+| File | What |
 |---|---|
-| `app/main.py` | FastAPI app, auto-resume loop, API endpoints |
-| `app/scheduler.py` | Scan, download, rate limiting, SSE events |
-| `app/captions.py` | Playwright → downloadyoutubesubtitles.com |
-| `app/db.py` | SQLite _SafeConn (thread-local, write-serialized) |
-| `app/ratelimit.py` | Centralized cooldown manager |
-| `app/channel.py` | Channel CRUD + yt-dlp |
-| `app/video.py` | Video CRUD + upsert |
-| `app/rate_limiter.py` | Per-process download rate limiter |
-| `app/models.py` | Pydantic models |
-| `app/sse.py` | Server-Sent Events |
-| `app/index.html` | Vue.js SPA (single-file) |
+| `app/main.py` | App entry, auto-resume loop, all endpoints |
+| `app/scheduler.py` | Video scanning, caption downloads, cooldowns |
+| `app/captions.py` | Playwright browser automation for the download site |
+| `app/db.py` | SQLite with thread-local connections and write serialization |
+| `app/ratelimit.py` | Shared cooldown manager for scan + download |
+| `app/rate_limiter.py` | Per-call rate limiter (interval, hourly/daily caps) |
+| `app/channel.py` | Channel CRUD, yt-dlp integration |
+| `app/video.py` | Video CRUD |
+| `app/models.py` | Pydantic request/response schemas |
+| `app/sse.py` | Server-Sent Events for UI progress |
+| `app/index.html` | Vue.js single-file SPA |
 
-## API
+## API Reference
 
-All `/api/*` endpoints require `X-API-Key` header (default: `12345`).
+Default API key: `12345`. All `/api/*` endpoints require `X-API-Key` header.
 
-| Method | Endpoint | Description |
+| Method | Endpoint | Purpose |
 |---|---|---|
-| POST | `/api/channels` | Add channel by YouTube URL |
-| GET | `/api/channels` | List all channels with status |
-| POST | `/api/channels/{id}/scan` | Trigger full scan |
+| POST | `/api/channels` | Add a YouTube channel |
+| GET | `/api/channels` | List channels with status/progress |
+| POST | `/api/channels/{id}/scan` | Trigger video discovery |
 | POST | `/api/channels/{id}/download` | Start caption download |
-| POST | `/api/channels/{id}/sync` | Scan + download |
+| POST | `/api/channels/{id}/sync` | Scan then download |
 | GET | `/api/channels/{id}/sync/stream` | SSE progress stream |
-| GET | `/api/channels/{id}/videos` | List channel videos |
-| GET | `/api/videos/{id}` | Get video details |
-| GET | `/api/videos/{id}/caption` | Get caption (JSON or TXT) |
-| POST | `/api/videos/{id}/caption` | Re-download single caption |
-| POST | `/api/captions/batch` | Batch fetch captions |
+| GET | `/api/channels/{id}/videos` | Channel video list (filterable) |
+| GET | `/api/videos/{id}/caption` | Caption as JSON or plain text |
+| POST | `/api/videos/{id}/caption` | Re-fetch single caption |
+| POST | `/api/captions/batch` | Batch fetch multiple captions |
 | POST | `/api/videos/retry-failed` | Requeue failed videos |
-| GET | `/api/queue` | Download queue + stats |
-| GET/PATCH | `/api/settings` | Rate limit config |
-| POST | `/api/shutdown` | Graceful shutdown |
-| GET | `/health` | Health check (no auth) |
+| GET | `/api/queue` | Pending/recent/failed videos |
+| GET/PATCH | `/api/settings` | Rate limit configuration |
+| POST | `/api/shutdown` | Graceful server shutdown |
+| GET | `/health` | Quick health check (no auth) |
 
-Full docs: [API-REFERENCE.md](API-REFERENCE.md)
+### Integration Example
+
+Use yt-cap as a caption provider for a RAG app:
+
+```python
+import requests
+
+HEADERS = {"x-api-key": "12345"}
+BASE = "http://localhost:8506"
+
+# Get recent captions
+resp = requests.get(f"{BASE}/api/queue", headers=HEADERS)
+data = resp.json()
+# data["recent"] has downloaded captions with video_id, title, chars, lang, url
+
+# Bulk fetch caption text
+ids = [r["video_id"] for r in data["recent"]]
+resp = requests.post(f"{BASE}/api/captions/batch", json={"video_ids": ids}, headers=HEADERS)
+captions = resp.json()["captions"]  # list of {video_id, title, language, text, chars}
+```
+
+See `ytcap_client.py` for a Python client wrapper.
 
 ## Rate Limiting
 
-The centralized `app/ratelimit.py` manager coordinates cooldowns between scanning and downloading:
+Rate limits are shared between scanning and downloading via a central manager (`app/ratelimit.py`). When either operation hits a limit, both pause for the cooldown period.
 
-- **3-minute cooldown** when any operation hits a rate limit (shared across all operations)
-- **10s interval** between caption downloads (configurable)
-- **3s delay** between scan chunks, waits for cooldown if active
-- **200/hr, 5000/day** caps (configurable via API)
+- **3-minute cooldown** on rate-limit detection
+- **10s interval** between caption fetches (adjustable)
+- **3s delay** between yt-dlp scan chunks
+- Caps: 200/hr, 5000/day (adjustable via API settings)
 
-When rate-limited, ALL operations (scan + download) pause until cooldown expires.
+## Database
 
-## Spec-Driven Development
+SQLite with WAL journal mode for concurrent read/write safety. Thread-local connections serialize writes through a global lock — single-writer, multi-reader. The `_SafeConn` wrapper prevents accidental connection closure across threads.
 
-This project uses [spec-kit](https://github.com/github/spec-kit) for specification-driven development. Every feature goes through:
+Video metadata (publish date, duration) is extracted for free from the download site's page — no extra API calls needed.
 
-```
-/speckit.specify → /speckit.plan → /speckit.analyze → /speckit.implement
-```
+## Known Limitations
 
-All specs live in `specs/`. The constitution is in `.specify/memory/constitution.md`.
-
-## QA Gate
-
-Before any deliverable, the QA test suite in `specs/007-qa-testing/spec.md` must pass:
-
-1. Health endpoint returns 200
-2. Channels/Queue endpoints return valid JSON
-3. Download trigger actually downloads captions
-4. No bug-induced errors in DB (e.g., import rename → NameError)
+- Playwright-based caption fetching means ~1 caption/minute (browser overhead + rate limits)
+- Single-machine design — SQLite isn't distributed
+- English + Korean languages tested primarily; others should work
+- Requires macOS for LaunchAgent; Docker available for Linux
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+MIT
