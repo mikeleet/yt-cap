@@ -3,7 +3,3 @@ data/
 __pycache__/
 *.pyc
 .DS_Store
-.opencode/node_modules/
-.env
-.opencode/AGENTS.md
-.opencode/CLIENT_PROMPT.md
