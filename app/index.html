@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>yt-cap - YouTube Caption Archive</title>
+<script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
+<script>window.VUE_FALLBACK=!window.Vue;if(!window.Vue)document.write('<script src="/vue.js?v=2"><\/script>')</script>
+<script>
+window.addEventListener('error', function(e) {
+  document.getElementById('vue-error').style.display = 'block';
+  document.getElementById('vue-error').textContent = 'JS Error: ' + (e.message || e.target?.src || 'unknown');
+});
+window.addEventListener('DOMContentLoaded', function() {
+  if (!window.Vue) {
+    document.getElementById('vue-error').style.display = 'block';
+    document.getElementById('vue-error').textContent = 'Vue not loaded. Check /vue.js?v=2';
+  }
+});
+</script>
+<div id="vue-error" style="display:none;position:fixed;top:10px;left:10px;background:#f85149;color:#fff;padding:10px 16px;border-radius:6px;z-index:99999;font:14px monospace;max-width:500px;word-break:break-all"></div>
+<style>
+:root {
+  --bg: #0d1117; --bg2: #161b22; --bg3: #21262d; --border: #30363d;
+  --text: #c9d1d9; --text2: #8b949e; --accent: #58a6ff; --green: #3fb950;
+  --red: #f85149; --yellow: #d2991d; --orange: #db6d28;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, sans-serif; }
+a { color: var(--accent); text-decoration: none; }
+button, input, select { font: inherit; }
+.container { max-width: 1200px; margin: 0 auto; padding: 16px; }
+.header { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.header h1 { font-size: 20px; }
+.nav { display: flex; gap: 8px; }
+.nav button { background: var(--bg3); border: 1px solid var(--border); color: var(--text); padding: 6px 14px; border-radius: 6px; cursor: pointer; }
+.nav button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.tab { display: none; }
+.tab.active { display: block; }
+.card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.card-title { font-size: 16px; font-weight: 600; }
+.input-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.input-row input { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 6px; }
+.btn { padding: 8px 16px; border-radius: 6px; border: 1px solid var(--border); cursor: pointer; font-weight: 500; color: var(--text); background: var(--bg3); }
+.btn:hover { opacity: 0.85; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-danger { background: var(--red); color: #fff; border-color: var(--red); }
+.btn-green { background: var(--green); color: #fff; border-color: var(--green); }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.badge-green { background: #1a3a1a; color: var(--green); }
+.badge-yellow { background: #3a2e0a; color: var(--yellow); }
+.badge-red { background: #3a1a1a; color: var(--red); }
+.badge-gray { background: #1a1a2e; color: var(--text2); }
+.badge-blue { background: #0a1a3a; color: var(--accent); }
+.status-row { display: flex; gap: 16px; flex-wrap: wrap; margin: 8px 0; }
+.status-item { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--text2); }
+.video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+.video-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.video-thumb { width: 100%; height: 180px; object-fit: cover; background: var(--bg3); }
+.video-info { padding: 10px 12px; }
+.video-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.video-meta { font-size: 11px; color: var(--text2); margin-bottom: 6px; }
+.video-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+.progress-bar { height: 6px; background: var(--bg3); border-radius: 3px; margin: 8px 0; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.3s; }
+.progress-fill.green { background: var(--green); }
+.sync-log { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; max-height: 200px; overflow-y: auto; font-size: 12px; font-family: monospace; color: var(--text2); margin-top: 8px; }
+.sync-log .event-scanning { color: var(--accent); }
+.sync-log .event-downloaded, .sync-log .event-scan_complete, .sync-log .event-download_complete { color: var(--green); }
+.sync-log .event-error, .sync-log .event-rate_limited, .sync-log .event-sync_error { color: var(--red); }
+.sync-log .event-cooldown { color: var(--orange); }
+.sync-log .event-unavailable { color: var(--orange); }
+.sync-log .event-download_progress, .sync-log .event-downloading_start { color: var(--text2); }
+.settings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.setting-item label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 4px; }
+.setting-item input { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: 6px; }
+.toggle { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.toggle-track { width: 36px; height: 20px; background: var(--bg3); border-radius: 10px; position: relative; transition: background 0.2s; }
+.toggle-track.on { background: var(--green); }
+.toggle-knob { width: 16px; height: 16px; background: #fff; border-radius: 50%; position: absolute; top: 2px; left: 2px; transition: left 0.2s; }
+.toggle-track.on .toggle-knob { left: 18px; }
+.empty { text-align: center; color: var(--text2); padding: 40px; }
+.empty em { color: var(--text); font-style: normal; }
+.refresh-hint { font-size: 11px; color: var(--text2); margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+.refresh-hint .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); display: inline-block; }
+.dl-progress { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin: 8px 0; }
+.dl-progress .dl-title { font-size: 13px; color: var(--accent); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dl-progress .dl-stats { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--text2); margin-top: 6px; }
+.activity-log { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; max-height: 500px; overflow-y: auto; font-size: 12px; font-family: monospace; }
+.activity-entry { display: flex; gap: 10px; padding: 4px 10px; border-bottom: 1px solid var(--border); align-items: baseline; }
+.activity-entry:last-child { border-bottom: none; }
+.activity-time { color: var(--text2); white-space: nowrap; min-width: 130px; }
+.activity-event { white-space: nowrap; min-width: 110px; }
+.activity-details { color: var(--text); word-break: break-all; }
+.activity-entry.event-downloaded .activity-event { color: var(--green); }
+.activity-entry.event-unavailable .activity-event { color: var(--orange); }
+.activity-entry.event-rate_limited .activity-event { color: var(--red); }
+.activity-entry.event-failed .activity-event { color: var(--red); }
+.activity-entry.event-skipped .activity-event { color: var(--text2); }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 9999; }
+.modal { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 24px; max-width: 480px; width: 90%; }
+.modal h3 { margin-bottom: 12px; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="container">
+    <div class="header">
+      <h1>yt-cap</h1>
+      <div class="nav">
+        <button :class="{active: tab==='channels'}" @click="setTab('channels')">Channels</button>
+        <button :class="{active: tab==='videos'}" @click="setTab('videos')">Videos</button>
+        <button :class="{active: tab==='activity'}" @click="setTab('activity')">Activity</button>
+        <button :class="{active: tab==='settings'}" @click="setTab('settings')">Settings</button>
+      </div>
+    </div>
+
+    <div :class="{tab: true, active: tab==='channels'}">
+      <div class="input-row">
+        <input v-model="newChannelUrl" @keyup.enter="addChannel" placeholder="YouTube channel URL or @handle...">
+        <button class="btn btn-primary" @click="addChannel">Add Channel</button>
+      </div>
+
+      <div v-if="channels.length === 0" class="empty">No channels yet — paste a YouTube URL above</div>
+
+      <div v-if="channels.length > 0" class="refresh-hint">
+        <span class="dot"></span> Auto-refreshes every 10s &middot; data persists in database
+        <span v-if="lastRefreshed" style="margin-left:auto">Last refresh: {{ fmtTime(lastRefreshed) }}</span>
+      </div>
+
+      <div v-for="ch in channels" :key="ch.channel_id" class="card">
+        <div class="card-header">
+          <div class="card-title">{{ ch.name }}</div>
+          <div style="display:flex;gap:6px">
+            <label class="toggle" :title="ch.auto_update ? 'Pause auto-update' : 'Resume auto-update'">
+              <div :class="['toggle-track', ch.auto_update ? 'on' : '']" @click="toggleChannel(ch)">
+                <div class="toggle-knob"></div>
+              </div>
+            </label>
+            <button class="btn btn-primary btn-sm" @click="scanChannel(ch)" :disabled="ch.sync_status==='scanning' || ch.sync_status==='downloading'">
+              {{ ch.sync_status === 'scanning' ? 'Scanning...' : 'Scan' }}
+            </button>
+            <button class="btn btn-sm" @click="downloadChannel(ch)" :disabled="ch.sync_status==='downloading'">
+              {{ downloadBtnText(ch) }}
+            </button>
+            <button class="btn btn-sm" @click="viewChannelVideos(ch)">Videos</button>
+            <button class="btn btn-danger btn-sm" @click="confirmDeleteChannel(ch)">&times;</button>
+          </div>
+        </div>
+        <div class="status-row">
+          <span class="status-item">
+            <span :class="'badge badge-' + statusColor(ch.sync_status)">{{ ch.sync_status }}</span>
+          </span>
+          <span class="status-item">Total: <strong>{{ ch.total_videos }}</strong></span>
+          <span class="status-item">&#x2705; <strong>{{ ch.captions_ok }}</strong></span>
+          <span class="status-item">&#x274C; <strong>{{ ch.captions_failed }}</strong></span>
+          <span v-if="ch.last_scan_at" class="status-item">Scanned: {{ fmtTime(ch.last_scan_at) }}</span>
+          <span v-if="ch.last_download_at" class="status-item">Downloaded: {{ fmtTime(ch.last_download_at) }}</span>
+        </div>
+        <div v-if="ch.sync_status === 'downloading' && ch.current_progress" class="dl-progress">
+          <div v-if="ch.current_progress.current_title" class="dl-title">&#x1F4E5; {{ ch.current_progress.current_title }}</div>
+          <div style="font-size:12px;color:var(--text2)">Progress: <strong>{{ ch.current_progress.done }}</strong> / <strong>{{ ch.current_progress.total }}</strong> videos</div>
+          <div class="progress-bar" style="margin:6px 0">
+            <div class="progress-fill" :style="{width: (ch.current_progress.total > 0 ? ch.current_progress.done / ch.current_progress.total * 100 : 0) + '%'}"></div>
+          </div>
+          <div class="dl-stats">
+            <span v-if="downloadRate(ch)">Rate: {{ downloadRate(ch) }}</span>
+            <span v-if="downloadEta(ch)">ETA: {{ downloadEta(ch) }}</span>
+            <span v-if="ch.current_progress.failed > 0" style="color:var(--red)">Failed: {{ ch.current_progress.failed }}</span>
+          </div>
+        </div>
+        <div v-if="ch.total_videos > 0" class="progress-bar">
+          <div class="progress-fill green" :style="{width: progressPct(ch) + '%'}"></div>
+        </div>
+        <div v-if="ch.error_message" class="sync-log" style="color:var(--red);margin-top:8px">{{ ch.error_message }}</div>
+        <div v-if="ch.sync_status === 'scanning' || ch.sync_status === 'downloading' || ch.sync_status === 'error'" class="sync-log">
+          <div v-for="(log, i) in (syncLogs[ch.channel_id] || [])" :key="i"
+               :class="'event-' + log.event">{{ log.text }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div :class="{tab: true, active: tab==='videos'}">
+      <div class="input-row" style="flex-wrap:wrap">
+        <select v-model="videoChannelFilter" @change="loadAllVideos" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;min-width:140px">
+          <option value="">All channels</option>
+          <option v-for="ch in channels" :key="ch.channel_id" :value="ch.channel_id">{{ ch.name }}</option>
+        </select>
+        <select v-model="videoStatusFilter" @change="loadAllVideos" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px">
+          <option value="">All statuses</option>
+          <option value="downloaded">&#x2705; Downloaded</option>
+          <option value="none">&#x23F3; Pending</option>
+          <option value="failed">&#x274C; Failed</option>
+          <option value="unavailable">&#x2298; Unavailable</option>
+          <option value="skipped">&#x1F6AB; Skipped</option>
+        </select>
+        <select v-model="videoDaysFilter" @change="loadAllVideos" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px">
+          <option value="">Anytime</option>
+          <option value="7">Last 7 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="90">Last 90 days</option>
+          <option value="365">Last year</option>
+        </select>
+      </div>
+      <div v-if="allVideos.length === 0" class="empty">No videos — add a channel and scan first</div>
+      <div class="video-grid">
+        <div v-for="v in allVideos" :key="v.video_id" class="video-card">
+          <img v-if="v.thumbnail_url" :src="v.thumbnail_url" class="video-thumb" loading="lazy">
+          <div v-else class="video-thumb" style="display:flex;align-items:center;justify-content:center;color:var(--text2)">No thumbnail</div>
+          <div class="video-info">
+            <div class="video-title">
+              <a :href="v.url" target="_blank" :title="v.title">{{ v.title }}</a>
+            </div>
+            <div class="video-meta">
+              <span v-if="v.publish_date || v.first_seen_at">{{ fmtDate(v.publish_date || v.first_seen_at) }}</span>
+              <span v-if="v.caption_lang"> &middot; {{ v.caption_lang }}</span>
+              <span v-if="v.caption_chars"> &middot; {{ v.caption_chars }} chars</span>
+              <span v-if="v.duration_sec"> &middot; {{ fmtDuration(v.duration_sec) }}</span>
+            </div>
+            <div class="video-meta" style="margin-bottom:8px">
+              <span :class="'badge badge-' + statusColor(v.caption_status)">{{ v.caption_status }}</span>
+            </div>
+            <div class="video-actions">
+              <button v-if="v.caption_status === 'downloaded'" class="btn btn-green btn-sm" @click="viewCaption(v)">View</button>
+              <button v-if="v.caption_status === 'downloaded'" class="btn btn-sm" @click="downloadCaption(v)">Download</button>
+              <button v-if="v.caption_status !== 'none'" class="btn btn-sm" @click="redownloadCaption(v)">Redownload</button>
+              <button v-if="v.caption_status === 'downloaded'" class="btn btn-sm" @click="deleteCaption(v)">Delete</button>
+              <button class="btn btn-sm" :class="v.never_download ? 'btn-green' : ''"
+                      @click="toggleNeverDownload(v)">
+                {{ v.never_download ? 'Unskip' : 'Skip' }}
+              </button>
+            </div>
+            <div v-if="viewingCaption === v.video_id" class="sync-log" style="max-height:300px;margin-top:8px;white-space:pre-wrap;font-size:12px;line-height:1.6;overflow-y:auto">{{ captionText }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div :class="{tab: true, active: tab==='activity'}">
+      <div class="refresh-hint">
+        <span class="dot"></span> Auto-refreshes every 10s
+        <span v-if="queueStats.total > 0" style="margin-left:auto">
+          Queue: {{ queueStats.pending }} &middot; 
+          <span v-if="queueStats.rate">Avg: {{ queueStats.rate }} &middot; </span>
+          <span v-if="queueStats.eta">ETA: {{ queueStats.eta }}</span>
+        </span>
+      </div>
+
+      <div v-if="currentActivity.active" class="card" style="border-color:var(--accent)">
+        <div class="card-title" style="margin-bottom:8px;color:var(--accent)">
+          {{ currentActivity.statusText }}
+        </div>
+        <div v-if="currentActivity.downloading" class="dl-progress">
+          <div v-if="currentActivity.currentTitle" class="dl-title">📥 {{ currentActivity.currentTitle }}</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:2px">
+            Phase: <strong style="color:var(--accent)">{{ currentActivity.phaseText }}</strong>
+          </div>
+          <div style="font-size:12px;color:var(--text2)">
+            Progress: <strong>{{ currentActivity.done }}</strong> / <strong>{{ currentActivity.total }}</strong>
+            <span v-if="currentActivity.speed"> &middot; ⚡ <strong>{{ currentActivity.speed }}</strong></span>
+            <span v-if="currentActivity.eta"> &middot; ⏱️ {{ currentActivity.eta }} remaining</span>
+          </div>
+          <div class="progress-bar" style="margin:6px 0">
+            <div class="progress-fill" :style="{width: currentActivity.pct + '%'}"></div>
+          </div>
+        </div>
+        <div v-if="!currentActivity.downloading" class="dl-stats" style="margin-top:4px">
+          <span v-if="queueStats.rate">📊 Average: <strong>{{ queueStats.rate }}</strong></span>
+          <span v-if="queueStats.eta"> &middot; Queue ETA: {{ queueStats.eta }}</span>
+        </div>
+        <div v-if="currentActivity.cooldownSecs > 0" style="color:var(--orange);font-size:13px;margin-top:8px">
+          ⏳ Cooldown: <strong>{{ currentActivity.cooldownSecs }}s</strong> remaining — auto-retries after
+        </div>
+      </div>
+
+      <div v-if="queue.length > 0" class="card" style="margin-bottom:8px">
+        <div class="card-title" style="margin-bottom:8px">Download Queue ({{ queue.length }} pending)</div>
+        <div class="progress-bar" style="margin:8px 0">
+          <div class="progress-fill green" :style="{width: queueStats.pct + '%'}"></div>
+        </div>
+        <div class="dl-stats" style="margin-bottom:8px">
+          <span>Total: {{ queueStats.total }} videos</span>
+          <span>Downloaded: {{ queueStats.downloaded }}</span>
+          <span>Failed: {{ queueStats.failed }}</span>
+          <span v-if="queueStats.unavailable > 0">Unavailable: {{ queueStats.unavailable }}</span>
+        </div>
+        <div class="activity-log" style="max-height:300px">
+          <div v-for="(q, i) in queue.slice(0, 50)" :key="'q'+i" class="activity-entry">
+            <span class="activity-time" style="min-width:40px">#{{ i + 1 }}</span>
+            <span class="activity-event" style="color:var(--yellow)">Pending</span>
+            <span class="activity-details">
+              <a :href="'https://www.youtube.com/watch?v=' + q.video_id" target="_blank" style="color:var(--accent)">{{ q.video_id }}</a>
+              &middot; {{ q.title?.substring(0, 80) }} &middot; {{ q.channel?.substring(0, 30) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="queuedChannels.length > 0" class="card" style="margin-bottom:8px">
+        <div class="card-title" style="margin-bottom:8px">Channel Queue ({{ queuedChannels.length }} waiting)</div>
+        <div class="activity-log" style="max-height:200px">
+          <div v-for="(cq, i) in queuedChannels" :key="'cq'+i" class="activity-entry" :class="'event-' + (cq.sync_status === 'scanning' ? 'scanning' : '')">
+            <span class="activity-time">#{{ i + 1 }}</span>
+            <span class="activity-event">
+              <span v-if="cq.sync_status === 'scanning'">🔍 Scanning</span>
+              <span v-else-if="cq.sync_status === 'queued'">⏳ Queued</span>
+              <span v-else>📋 {{ cq.sync_status }}</span>
+            </span>
+            <span class="activity-details">
+              {{ cq.name?.substring(0, 30) }} &middot; {{ cq.total_videos }} videos &middot; {{ cq.captions_ok }} captions ready
+              &middot; {{ cq.total_videos - cq.captions_ok - (cq.captions_failed || 0) }} pending
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="recentDownloads.length > 0" class="card">
+        <div class="card-title" style="margin-bottom:8px">Recent Downloads ({{ recentDownloads.length }})</div>
+        <div class="activity-log" style="max-height:400px">
+          <div v-for="(r, i) in recentDownloads" :key="'r'+i" class="activity-entry event-downloaded">
+            <span class="activity-time">{{ fmtTime(r.at) }}</span>
+            <span class="activity-event">✅ Downloaded</span>
+            <span class="activity-details">
+              <a :href="r.url" target="_blank" style="color:var(--accent)">{{ r.video_id }}</a>
+              &middot; {{ r.chars?.toLocaleString() }}c {{ r.lang }} &middot; {{ r.channel?.substring(0, 30) }} &middot; {{ r.title?.substring(0, 60) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="failedRecent.length > 0" class="card">
+        <div class="card-title" style="margin-bottom:8px">
+          Failed / Unavailable ({{ failedRecent.length }} shown, {{ queueStats.failed + queueStats.unavailable }} total)
+          <button class="btn btn-sm btn-primary" style="margin-left:8px" @click="retryAllFailed">↻ Retry All</button>
+        </div>
+        <div class="activity-log" style="max-height:200px">
+          <div v-for="(f, i) in failedRecent" :key="'f'+i" :class="'activity-entry event-' + (f.status === 'failed' ? 'rate_limited' : 'unavailable')">
+            <span class="activity-time" style="min-width:40px">#{{ i + 1 }}</span>
+            <span class="activity-event">{{ f.status === 'failed' ? '⏳ Rate limited' : '⊘ Unavailable' }}</span>
+              <span class="activity-details">
+                <a :href="f.url" target="_blank" style="color:var(--accent)">{{ f.video_id }}</a>
+                &middot; {{ f.error }} &middot; {{ f.title?.substring(0, 60) }}
+                <button class="btn btn-sm" style="margin-left:6px;padding:1px 8px;font-size:10px" @click="retryFailed(f.video_id)">↻ Retry</button>
+              </span>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="!queue.length && !recentDownloads.length" class="empty">No download activity yet — scan a channel then click Captions</div>
+    </div>
+
+    <div :class="{tab: true, active: tab==='settings'}">
+      <div class="card">
+        <div class="card-title" style="margin-bottom:12px">Rate Limiting</div>
+        <div class="settings-grid">
+          <div class="setting-item">
+            <label>Max Concurrent Fetches</label>
+            <input v-model="settingsForm.max_concurrent_fetches" type="number" min="1" max="10">
+          </div>
+          <div class="setting-item">
+            <label>Min Interval (seconds)</label>
+            <input v-model="settingsForm.min_interval_seconds" type="number" min="1" max="60">
+          </div>
+          <div class="setting-item">
+            <label>Max Per Hour</label>
+            <input v-model="settingsForm.max_per_hour" type="number" min="1" max="1000">
+          </div>
+          <div class="setting-item">
+            <label>Max Per Day</label>
+            <input v-model="settingsForm.max_per_day" type="number" min="1" max="10000">
+          </div>
+        </div>
+        <div style="margin-top:12px">
+          <button class="btn btn-primary btn-sm" @click="saveSettings">Save Settings</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:8px">API Key</div>
+        <code style="background:var(--bg);padding:4px 8px;border-radius:4px">{{ apiKey }}</code>
+        <p style="color:var(--text2);font-size:12px;margin-top:4px">Set via <code>YTCAP_API_KEY</code> env var. Default: <code>12345</code></p>
+      </div>
+    </div>
+
+  <div v-if="deleteTarget" class="modal-overlay" @click.self="deleteTarget=null">
+    <div class="modal">
+      <h3>Delete Channel</h3>
+      <p>Remove <strong>{{ deleteTarget.name }}</strong> and all its {{ deleteTarget.total_videos }} videos?</p>
+      <div class="modal-actions">
+        <button class="btn" @click="deleteTarget=null">Cancel</button>
+        <button class="btn btn-danger" @click="deleteChannel(deleteTarget)">Delete</button>
+      </div>
+    </div>
+  </div>
+  </div>
+</div>
+
+<script>
+try {
+const { createApp, ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } = Vue;
+
+createApp({
+  setup() {
+    const tab = ref('channels');
+
+    // Persist tab via URL hash
+    function setTab(name) {
+      tab.value = name;
+      window.location.hash = name;
+      if (name === 'videos') loadAllVideos();
+      if (name === 'activity') loadQueue();
+      if (name === 'settings') loadSettings();
+    }
+    function restoreTab() {
+      const h = window.location.hash.replace('#', '');
+      if (['channels','videos','activity','settings'].includes(h)) tab.value = h;
+    }
+    restoreTab();
+    window.addEventListener('hashchange', restoreTab);
+    const channels = ref([]);
+    const queuedChannels = computed(() => 
+      channels.value.filter(ch => 
+        ['scanning', 'queued'].includes(ch.sync_status) && ch.total_videos > 0
+      )
+    );
+    const allVideos = ref([]);
+    const videoStatusFilter = ref('');
+    const videoChannelFilter = ref('');
+    const videoDaysFilter = ref('');
+    const newChannelUrl = ref('');
+    const apiKey = ref('12345');
+    const syncLogs = reactive({});
+    const deleteTarget = ref(null);
+    const lastRefreshed = ref(null);
+    const queue = ref([]);
+    const recentDownloads = ref([]);
+    const failedRecent = ref([]);
+    const queueStats = reactive({ total: 0, pending: 0, downloaded: 0, failed: 0, unavailable: 0, pct: 0, rate: '', eta: '' });
+    const viewingCaption = ref(null);
+    const captionText = ref('');
+    const currentActivity = reactive({
+      active: false, statusText: '', downloading: false,
+      currentTitle: '', done: 0, total: 0, pct: 0, speed: '', eta: '',
+      cooldownSecs: 0, phaseText: '',
+    });
+    const downloadTimers = reactive({});
+
+    const settingsForm = reactive({
+      max_concurrent_fetches: '2',
+      min_interval_seconds: '3',
+      max_per_hour: '100',
+      max_per_day: '500',
+    });
+
+    let channelsInterval = null;
+    let activityInterval = null;
+    let cooldownInterval = null;
+
+    const headers = () => ({ 'X-API-Key': apiKey.value, 'Content-Type': 'application/json' });
+
+    async function api(url, opts = {}) {
+      const res = await fetch(url, { ...opts, headers: { ...headers(), ...(opts.headers || {}) } });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || 'Request failed');
+      }
+      return res;
+    }
+
+    async function loadChannels() {
+      try {
+        const res = await api('/api/channels');
+        channels.value = await res.json();
+        lastRefreshed.value = new Date();
+        for (const ch of channels.value) {
+          if (ch.sync_status === 'downloading' && ch.current_progress && ch.current_progress.total > 0) {
+            if (!downloadTimers[ch.channel_id]) {
+              downloadTimers[ch.channel_id] = { start: Date.now(), initialDone: ch.current_progress.done || 0 };
+            }
+          }
+        }
+      } catch (e) { console.error(e); }
+    }
+
+    async function addChannel() {
+      if (!newChannelUrl.value.trim()) return;
+      try {
+        const res = await api('/api/channels', { method: 'POST', body: JSON.stringify({ url: newChannelUrl.value }) });
+        newChannelUrl.value = '';
+        const data = await res.json();
+        await loadChannels();
+        const ch = channels.value.find(c => c.channel_id === data.channel_id);
+        if (ch) scanChannel(ch);
+      } catch (e) { alert('Error: ' + e.message); }
+    }
+
+    async function toggleChannel(ch) {
+      try {
+        await api(`/api/channels/${ch.channel_id}`, {
+          method: 'PATCH', body: JSON.stringify({ auto_update: !ch.auto_update })
+        });
+        await loadChannels();
+      } catch (e) { alert('Error: ' + e.message); }
+    }
+
+    function confirmDeleteChannel(ch) { deleteTarget.value = ch; }
+
+    async function deleteChannel(ch) {
+      try {
+        await api(`/api/channels/${ch.channel_id}`, { method: 'DELETE' });
+        deleteTarget.value = null;
+        await loadChannels();
+      } catch (e) { alert('Error: ' + e.message); }
+    }
+
+    function viewChannelVideos(ch) {
+      videoStatusFilter.value = '';
+      videoChannelFilter.value = ch.channel_id;
+      videoDaysFilter.value = '';
+      setTab('videos');
+      loadAllVideos();
+    }
+
+    async function loadChannelVideos(channelId) {
+      try {
+        const res = await api(`/api/channels/${channelId}/videos?limit=500`);
+        allVideos.value = await res.json();
+      } catch (e) { console.error(e); }
+    }
+
+    async function loadAllVideos() {
+      try {
+        const params = new URLSearchParams({ limit: '500' });
+        if (videoStatusFilter.value) params.set('status', videoStatusFilter.value);
+        if (videoChannelFilter.value) params.set('channel_id', videoChannelFilter.value);
+        if (videoDaysFilter.value) params.set('days', videoDaysFilter.value);
+        const res = await api(`/api/videos?${params}`);
+        allVideos.value = await res.json();
+      } catch (e) { console.error(e); }
+    }
+
+    async function scanChannel(ch) {
+      try {
+        await api(`/api/channels/${ch.channel_id}/scan`, { method: 'POST' });
+        syncLogs[ch.channel_id] = [];
+        ch.sync_status = 'scanning';
+        ch.error_message = null;
+        connectSSE(ch.channel_id, 'scan');
+      } catch (e) { alert('Error: ' + e.message); }
+    }
+
+    async function downloadChannel(ch) {
+      try {
+        await api(`/api/channels/${ch.channel_id}/download`, { method: 'POST' });
+        downloadTimers[ch.channel_id] = { start: Date.now(), initialDone: ch.captions_ok || 0 };
+        syncLogs[ch.channel_id] = [];
+        ch.sync_status = 'downloading';
+        ch.error_message = null;
+        connectSSE(ch.channel_id, 'download');
+      } catch (e) { alert('Error: ' + e.message); }
+    }
+
+    function connectSSE(channelId, mode) {
+      const url = `/api/channels/${channelId}/sync/stream`;
+      const es = new EventSource(url);
+      es.addEventListener('connected', () => {
+        if (!syncLogs[channelId]) syncLogs[channelId] = [];
+        syncLogs[channelId].push({ event: 'connected', text: `Connected (${mode})` });
+      });
+      es.addEventListener('scanning', (e) => {
+        const d = JSON.parse(e.data);
+        syncLogs[channelId].push({ event: 'scanning', text: d.message });
+      });
+      es.addEventListener('scan_complete', (e) => {
+        const d = JSON.parse(e.data);
+        syncLogs[channelId].push({ event: 'scan_complete', text: `&#x2705; ${d.message}` });
+        loadChannels();
+        setTimeout(() => es.close(), 1000);
+      });
+      es.addEventListener('downloading_start', (e) => {
+        const d = JSON.parse(e.data);
+        syncLogs[channelId].push({ event: 'downloading_start', text: d.message });
+      });
+      es.addEventListener('download_progress', (e) => {
+        const d = JSON.parse(e.data);
+        syncLogs[channelId].push({ event: 'download_progress', text: `${d.pending} videos need captions` });
+      });
+      es.addEventListener('downloaded', (e) => {
+        const d = JSON.parse(e.data);
+        syncLogs[channelId].push({ event: 'downloaded', text: `&#x2705; ${d.video_title} (${d.chars} chars, ${d.language})` });
+      });
+      es.addEventListener('unavailable', (e) => {
+        const d = JSON.parse(e.data);
+        syncLogs[channelId].push({ event: 'unavailable', text: `&#x2298; ${d.video_title || d.video_id}: ${d.reason}` });
+      });
+      es.addEventListener('rate_limited', (e) => {
+        const d = JSON.parse(e.data);
+        syncLogs[channelId].push({ event: 'rate_limited', text: `&#x23F3; Rate limited! Cooldown ${d.cooldown_seconds}s` });
+      });
+      es.addEventListener('cooldown', (e) => {
+        const d = JSON.parse(e.data);
+        syncLogs[channelId].push({ event: 'cooldown', text: `&#x23F3; ${d.message}` });
+      });
+      es.addEventListener('error', (e) => {
+        const d = JSON.parse(e.data);
+        syncLogs[channelId].push({ event: 'error', text: `&#x274C; ${d.video_title || d.video_id}: ${d.error}` });
+      });
+      es.addEventListener('download_complete', (e) => {
+        const d = JSON.parse(e.data);
+        syncLogs[channelId].push({ event: 'download_complete', text: d.cooldown
+          ? `&#x23F3; Rate limited. ${d.downloaded} downloaded, ${d.failed} failed.`
+          : `Done! Downloaded: ${d.downloaded}, Failed: ${d.failed}` });
+        delete downloadTimers[channelId];
+        loadChannels();
+        setTimeout(() => es.close(), 1000);
+      });
+      es.addEventListener('sync_error', (e) => {
+        const d = JSON.parse(e.data);
+        syncLogs[channelId].push({ event: 'sync_error', text: `Error: ${d.error}` });
+        delete downloadTimers[channelId];
+        loadChannels();
+        es.close();
+      });
+      es.addEventListener('ping', () => {});
+      es.onerror = () => { delete downloadTimers[channelId]; loadChannels(); es.close(); };
+    }
+
+    async function downloadCaption(v) {
+      try {
+        const res = await api(`/api/videos/${v.video_id}/caption?format=txt`);
+        const text = await res.text();
+        const blob = new Blob([text], { type: 'text/plain' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${v.video_id}.txt`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      } catch (e) { alert('Error: ' + e.message); }
+    }
+
+    async function redownloadCaption(v) {
+      try {
+        await api(`/api/videos/${v.video_id}/caption`, { method: 'POST' });
+        await loadAllVideos();
+      } catch (e) { alert('Error: ' + e.message); }
+    }
+
+    async function deleteCaption(v) {
+      try {
+        await api(`/api/videos/${v.video_id}/caption`, { method: 'DELETE' });
+        await loadAllVideos();
+      } catch (e) { alert('Error: ' + e.message); }
+    }
+
+    async function retryFailed(videoId) {
+      try {
+        await api('/api/videos/retry-failed', {
+          method: 'POST',
+          body: JSON.stringify({ video_ids: [videoId] }),
+          headers: { 'Content-Type': 'application/json' },
+        });
+        loadQueue();
+      } catch (e) { alert('Error: ' + e.message); }
+    }
+
+    async function retryAllFailed() {
+      if (!confirm('Retry ALL failed/unavailable videos? They will be added to the download queue.')) return;
+      const ids = failedRecent.value.map(f => f.video_id);
+      if (!ids.length) return;
+      try {
+        await api('/api/videos/retry-failed', {
+          method: 'POST',
+          body: JSON.stringify({ video_ids: ids }),
+          headers: { 'Content-Type': 'application/json' },
+        });
+        loadQueue();
+      } catch (e) { alert('Error: ' + e.message); }
+    }
+
+    async function toggleNeverDownload(v) {
+      try {
+        await api(`/api/videos/${v.video_id}`, {
+          method: 'PATCH', body: JSON.stringify({ never_download: !v.never_download })
+        });
+        await loadAllVideos();
+      } catch (e) { alert('Error: ' + e.message); }
+    }
+
+    async function loadSettings() {
+      try {
+        const res = await api('/api/settings');
+        const s = await res.json();
+        Object.assign(settingsForm, s);
+      } catch (e) { console.error(e); }
+    }
+
+    async function saveSettings() {
+      try {
+        await api('/api/settings', { method: 'PATCH', body: JSON.stringify(settingsForm) });
+        alert('Settings saved');
+      } catch (e) { alert('Error: ' + e.message); }
+    }
+
+    async function viewCaption(v) {
+      if (viewingCaption.value === v.video_id) {
+        viewingCaption.value = null;
+        captionText.value = '';
+        return;
+      }
+      try {
+        const res = await api(`/api/videos/${v.video_id}/caption?format=json`);
+        const data = await res.json();
+        captionText.value = data.text || '';
+        viewingCaption.value = v.video_id;
+      } catch (e) {
+        alert('Error loading caption: ' + e.message);
+      }
+    }
+
+    async function loadQueue() {
+      try {
+        const res = await api('/api/queue');
+        const data = await res.json();
+        queue.value = data.queue || [];
+        recentDownloads.value = data.recent || [];
+        failedRecent.value = data.failed || [];
+
+        let total = 0, downloaded = 0, failed = 0, unavailable = 0;
+        let downloadingCh = null;
+
+        // Check each channel's status for real-time progress + cooldown
+        for (const ch of channels.value) {
+          total += ch.total_videos || 0;
+          downloaded += ch.captions_ok || 0;
+          failed += ch.captions_failed || 0;
+          if (ch.sync_status === 'downloading' && ch.current_progress) {
+            downloadingCh = ch;
+          }
+        }
+        unavailable = failedRecent.value.filter(f => f.status === 'unavailable').length;
+        const pending = total - downloaded - failed - unavailable;
+
+        queueStats.total = total;
+        queueStats.pending = pending;
+        queueStats.downloaded = downloaded;
+        queueStats.failed = failed;
+        queueStats.unavailable = unavailable;
+        queueStats.pct = total > 0 ? Math.round(downloaded / total * 100) : 0;
+
+        // Current activity status
+        currentActivity.active = false;
+        currentActivity.downloading = false;
+        currentActivity.cooldownSecs = 0;
+
+        if (downloadingCh) {
+          const cp = downloadingCh.current_progress;
+          currentActivity.active = true;
+          currentActivity.downloading = true;
+          currentActivity.statusText = 'Downloading captions';
+          currentActivity.currentTitle = cp.current_title || '';
+          currentActivity.done = cp.done || 0;
+          currentActivity.total = cp.total || 0;
+          currentActivity.pct = cp.total > 0 ? Math.round((cp.done || 0) / cp.total * 100) : 0;
+          currentActivity.phaseText = formatPhase(cp.phase);
+
+          // Fix speed: estimate from done count vs timer
+          const timer = downloadTimers[downloadingCh.channel_id];
+          if (!timer) {
+            downloadTimers[downloadingCh.channel_id] = { start: Date.now(), initialDone: cp.done || 0 };
+          }
+          const t = downloadTimers[downloadingCh.channel_id];
+          if (t && cp.done > t.initialDone) {
+            const elapsed = (Date.now() - t.start) / 1000;
+            if (elapsed > 2) {
+              const doneInSession = cp.done - t.initialDone;
+              const vps = doneInSession / elapsed;
+              if (vps > 0) {
+                const perMin = vps * 60;
+              if (perMin >= 1) currentActivity.speed = perMin.toFixed(1) + ' captions/min (sequential)';
+              else currentActivity.speed = (perMin * 60).toFixed(1) + ' captions/hr (sequential)';
+                const remaining = cp.total - cp.done;
+                const eta = remaining / vps;
+                if (eta < 60) currentActivity.eta = Math.round(eta) + 's';
+                else if (eta < 3600) currentActivity.eta = Math.round(eta / 60) + 'm';
+                else currentActivity.eta = Math.round(eta / 3600) + 'h';
+              }
+            }
+          }
+        }
+
+        // Check for cooldowns on any channel
+        for (const ch of channels.value) {
+          if (ch.error_message && ch.error_message.toLowerCase().includes('cooldown')) {
+            const match = ch.error_message.match(/cooldown\s+(\d+)s/);
+            if (match) {
+              currentActivity.cooldownSecs = parseInt(match[1]);
+              currentActivity.active = true;
+              currentActivity.statusText = 'Paused — rate limited';
+              currentActivity.downloading = false;
+            }
+          }
+        }
+
+        if (!currentActivity.active && total > 0 && pending > 0) {
+          currentActivity.active = true;
+          const autoResume = channels.value.some(ch => ch.auto_update);
+          currentActivity.statusText = autoResume
+            ? 'Idle — auto-resume enabled'
+            : 'Idle — click Download to resume';
+        }
+
+        // Historical rate from recent downloads
+        if (recentDownloads.value.length >= 2) {
+          const now = Date.now();
+          const times = recentDownloads.value.slice(0, 20).map(r => new Date(r.at).getTime()).filter(t => t);
+          if (times.length >= 2) {
+            const span = (now - times[times.length - 1]) / 1000;
+            const ratePerSec = times.length / span;
+            if (ratePerSec > 0) {
+              queueStats.rate = (ratePerSec * 3600).toFixed(1) + ' captions/hr';
+              if (pending > 0 && !currentActivity.cooldownSecs) {
+                const etaSec = pending / ratePerSec;
+                if (etaSec < 60) queueStats.eta = Math.round(etaSec) + 's';
+                else if (etaSec < 3600) queueStats.eta = Math.round(etaSec / 60) + 'm';
+                else queueStats.eta = Math.round(etaSec / 3600) + 'h';
+              }
+            }
+          }
+        }
+      } catch (e) { console.error(e); }
+    }
+
+    function progressPct(ch) {
+      if (!ch.total_videos) return 0;
+      return Math.round((ch.captions_ok / ch.total_videos) * 100);
+    }
+
+    function statusColor(s) {
+      const map = { downloaded: 'green', none: 'yellow', failed: 'red', unavailable: 'red', scanning: 'blue', downloading: 'blue', idle: 'gray', paused: 'gray', error: 'red', skipped: 'gray', queued: 'gray' };
+      return map[s] || 'gray';
+    }
+
+    function fmtDate(d) {
+      if (!d) return '';
+      return new Date(d).toLocaleDateString();
+    }
+
+    function fmtTime(d) {
+      if (!d) return '';
+      const dt = new Date(d);
+      return dt.toLocaleDateString() + ' ' + dt.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    }
+
+    function fmtDuration(secs) {
+      if (!secs) return '';
+      const m = Math.floor(secs / 60);
+      const s = secs % 60;
+      return `${m}:${String(s).padStart(2, '0')}`;
+    }
+
+    function formatPhase(phase) {
+      const map = {
+        'starting': 'Starting up...',
+        'browser_launch': 'Launching browser',
+        'page_load': 'Loading download page',
+        'lang_detect': 'Detecting subtitle language',
+        'txt_download': 'Downloading TXT file',
+        'saving': 'Saving to database',
+      };
+      return map[phase] || phase || 'Processing...';
+    }
+
+    function fmtDurationLong(secs) {
+      if (!secs || secs < 0 || !isFinite(secs)) return '';
+      if (secs < 60) return `${Math.round(secs)}s`;
+      if (secs < 3600) return `${Math.round(secs / 60)}m`;
+      const h = Math.floor(secs / 3600);
+      const m = Math.floor((secs % 3600) / 60);
+      return `${h}h ${m}m`;
+    }
+
+    function downloadBtnText(ch) {
+      if (ch.sync_status !== 'downloading') return 'Download';
+      const cp = ch.current_progress;
+      if (cp && cp.total) return `DL (${cp.done}/${cp.total})`;
+      return 'Downloading...';
+    }
+
+    function downloadRate(ch) {
+      const cp = ch.current_progress;
+      if (!cp || !cp.done || !cp.total) return '';
+      const timer = downloadTimers[ch.channel_id];
+      if (!timer) return '';
+      const elapsed = (Date.now() - timer.start) / 1000;
+      if (elapsed < 1 || cp.done < 1) return '';
+      const vps = cp.done / elapsed;
+      const perMin = vps * 60;
+      if (perMin >= 0.1) return perMin.toFixed(1) + '/min';
+      return (vps * 3600).toFixed(1) + '/hr';
+    }
+
+    function downloadEta(ch) {
+      const cp = ch.current_progress;
+      if (!cp || !cp.done || !cp.total) return '';
+      const timer = downloadTimers[ch.channel_id];
+      if (!timer) return '';
+      const elapsed = (Date.now() - timer.start) / 1000;
+      if (elapsed < 1 || cp.done < 1) return '';
+      const vps = cp.done / elapsed;
+      if (vps <= 0) return '';
+      const eta = (cp.total - cp.done) / vps;
+      return fmtDurationLong(eta);
+    }
+
+    onMounted(() => {
+      loadChannels();
+      channelsInterval = setInterval(loadChannels, 10000);
+      // Dynamic cooldown ticker
+      cooldownInterval = setInterval(() => {
+        if (currentActivity.cooldownSecs > 0) {
+          currentActivity.cooldownSecs--;
+          if (currentActivity.cooldownSecs <= 0) {
+            currentActivity.cooldownSecs = 0;
+            const autoResume = channels.value.some(ch => ch.auto_update);
+            currentActivity.statusText = autoResume
+              ? 'Idle — auto-resume enabled'
+              : 'Idle — click Download to resume';
+            currentActivity.active = !!downloadingChannels() || (queueStats.total > 0 && queueStats.pending > 0);
+            currentActivity.downloading = false;
+          }
+        }
+      }, 1000);
+      // Escape key closes delete modal
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && deleteTarget.value) deleteTarget.value = null;
+      });
+    });
+
+    function downloadingChannels() {
+      return channels.value.some(ch => ch.sync_status === 'downloading' && ch.current_progress);
+    }
+
+    onUnmounted(() => {
+      if (channelsInterval) clearInterval(channelsInterval);
+      if (activityInterval) clearInterval(activityInterval);
+      if (cooldownInterval) clearInterval(cooldownInterval);
+    });
+
+    watch(tab, (newTab) => {
+      if (newTab === 'activity') {
+        loadChannels();
+        loadQueue();
+        if (activityInterval) clearInterval(activityInterval);
+        activityInterval = setInterval(loadQueue, 10000);
+      } else {
+        if (activityInterval) {
+          clearInterval(activityInterval);
+          activityInterval = null;
+        }
+      }
+    });
+
+    return {
+      tab, channels, allVideos, videoStatusFilter, videoChannelFilter, videoDaysFilter,
+      newChannelUrl, apiKey, syncLogs, deleteTarget, settingsForm,
+      lastRefreshed, queue, recentDownloads, failedRecent, queueStats,
+      queuedChannels, viewingCaption, captionText, currentActivity,
+      addChannel, toggleChannel, confirmDeleteChannel, deleteChannel,
+      viewChannelVideos, loadChannelVideos, loadAllVideos,
+      scanChannel, downloadChannel, downloadCaption, redownloadCaption, deleteCaption,
+      toggleNeverDownload, loadSettings, saveSettings,
+      loadQueue, viewCaption, retryFailed, retryAllFailed, setTab,
+      progressPct, statusColor, fmtDate, fmtTime, fmtDuration,
+      downloadBtnText, downloadRate, downloadEta, formatPhase,
+    };
+  }
+}).mount('#app');
+} catch(e) {
+  var el = document.getElementById('vue-error');
+  el.style.display = 'block';
+  el.textContent = 'App Error: ' + e.message;
+  console.error(e);
+}
+</script>
+</body>
+</html>

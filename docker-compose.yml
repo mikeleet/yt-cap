@@ -1,0 +1,12 @@
+services:
+  ytcap:
+    build: .
+    container_name: ytcap
+    ports:
+      - "${YTCAP_PORT:-8506}:8506"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - YTCAP_API_KEY=${YTCAP_API_KEY:-12345}
+      - YTCAP_UI_PIN=${YTCAP_UI_PIN:-5580}
+    restart: unless-stopped
